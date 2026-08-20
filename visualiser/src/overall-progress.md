@@ -70,6 +70,10 @@ import {groupServicesByPod, prepareServicesWithPod} from "./components/pod-group
 ```
 
 ```js
+import {NO_POD, deriveFilterOptions, deriveAvailableProducts, applyFilters} from "./components/filter-utils.js";
+```
+
+```js
 // Map promotionType to its valid phases from the schema
 const phasesByPromotionType = {
   securePipelines: currentSchema["$defs"]["secure-pipelines-phases"].properties.automated.items.properties.phase.enum,
@@ -97,9 +101,7 @@ const allServices = prepareServicesWithPod(repositories);
 
 ```js
 // Derive unique filter options from unfiltered data (include "No Pod" for services without a pod)
-const NO_POD = "No Pod";
-const allPodValues = [...new Set(allServices.map(s => s.pod).filter(Boolean))].sort();
-const podOptionsWithNoPod = allServices.some(s => !s.pod) ? [...allPodValues, NO_POD] : allPodValues;
+const {allPodValues, podOptionsWithNoPod} = deriveFilterOptions(allServices);
 ```
 
 <div class="card" style="padding: 1rem;">
@@ -119,11 +121,7 @@ const selectedPods = view(Inputs.checkbox(podOptionsWithNoPod, {label: "Pod", va
 
 ```js
 // Product options filtered by selected pods
-const availableProducts = [...new Set(
-  allServices
-    .filter(s => s.pod ? selectedPods.includes(s.pod) : selectedPods.includes(NO_POD))
-    .map(s => s.product)
-)].sort();
+const availableProducts = deriveAvailableProducts(allServices, selectedPods);
 const selectedProducts = view(Inputs.checkbox(availableProducts, {label: "Product", value: availableProducts}));
 ```
 
@@ -132,9 +130,7 @@ const selectedProducts = view(Inputs.checkbox(availableProducts, {label: "Produc
 
 ```js
 // Apply all filters (search result already filtered by repository, then pod + product)
-const filteredServices = repoFilteredServices
-  .filter(s => s.pod ? selectedPods.includes(s.pod) : selectedPods.includes(NO_POD))
-  .filter(s => selectedProducts.includes(s.product));
+const filteredServices = applyFilters(repoFilteredServices, {selectedPods, selectedProducts});
 ```
 
 ```js

@@ -75,6 +75,10 @@ import {groupServicesByPod, prepareServicesWithPod} from "./components/pod-group
 ```
 
 ```js
+import {NO_POD, deriveFilterOptions, deriveAvailableProducts, applyFilters} from "./components/filter-utils.js";
+```
+
+```js
 // Map promotionType to its valid phases from the schema
 const phasesByPromotionType = {
   securePipelines: currentSchema["$defs"]["secure-pipelines-phases"].properties.automated.items.properties.phase.enum,
@@ -96,12 +100,47 @@ const purposes = currentSchema["$defs"]["purpose"].enum;
 ```
 
 ```js
-// Group services by product, attaching repository name, URL, and pod
-const servicesByProduct = Object.groupBy(
-  prepareServicesWithPod(repositories)
-    .filter(service => isIncluded(service.product, service.component)),
-  service => service.product
-);
+// All services (unfiltered, after isIncluded config filter) for deriving filter options
+const allServices = prepareServicesWithPod(repositories)
+  .filter(service => isIncluded(service.product, service.component));
+```
+
+```js
+// Derive unique filter options from unfiltered data (include "No Pod" for services without a pod)
+const {allPodValues, podOptionsWithNoPod} = deriveFilterOptions(allServices);
+```
+
+<div class="card" style="padding: 1rem;">
+
+```js
+const repoFilteredServices = view(Inputs.search(allServices, {
+  placeholder: "Search repositories…",
+  filter: (query) => (d) => d.repository.toLowerCase().includes(query.toLowerCase())
+}));
+```
+
+<div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+
+```js
+const selectedPods = view(Inputs.checkbox(podOptionsWithNoPod, {label: "Pod", value: podOptionsWithNoPod}));
+```
+
+```js
+// Product options filtered by selected pods
+const availableProducts = deriveAvailableProducts(allServices, selectedPods);
+const selectedProducts = view(Inputs.checkbox(availableProducts, {label: "Product", value: availableProducts}));
+```
+
+</div>
+</div>
+
+```js
+// Apply all filters (search result already filtered by repository, then pod + product)
+const filteredServices = applyFilters(repoFilteredServices, {selectedPods, selectedProducts});
+```
+
+```js
+const podGrouping = groupServicesByPod(filteredServices);
 ```
 
 ```js
@@ -171,12 +210,6 @@ function renderDonut(group) {
 ```
 
 ```js
-// Group all services by pod
-const allServices = Object.values(servicesByProduct).flat();
-const podGrouping = groupServicesByPod(allServices);
-```
-
-```js
 function renderProductGrids(product, services) {
   const allChecksGrid = buildAllChecksGrid(product, services, allCheckTypes);
 
@@ -213,7 +246,9 @@ function renderProductGrids(product, services) {
 ```
 
 ```js
-display(html`${podGrouping.pods.map(pod => html`
+display(html`${filteredServices.length === 0
+  ? html`<p style="color: #666; font-style: italic; padding: 2rem;">No services match the current filters.</p>`
+  : html`${podGrouping.pods.map(pod => html`
   <details open>
     <summary><h2 style="display: inline;">${pod.name}</h2></summary>
     ${Object.keys(pod.products).map(product => renderProductGrids(product, pod.products[product]))}
@@ -223,7 +258,7 @@ display(html`${podGrouping.pods.map(pod => html`
     <summary><h2 style="display: inline;">No Pod</h2></summary>
     ${Object.keys(podGrouping.noPod).map(product => renderProductGrids(product, podGrouping.noPod[product]))}
   </details>
-` : ""}`)
+` : ""}`}`)
 ```
 
 ----

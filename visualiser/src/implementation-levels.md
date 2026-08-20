@@ -71,6 +71,10 @@ import {renderStatusGrid, buildCheckLevelGrid, buildIntegrationScopeGrid, buildA
 ```
 
 ```js
+import {groupServicesByPod} from "./components/pod-grouping.js";
+```
+
+```js
 // Map promotionType to its valid phases from the schema
 const phasesByPromotionType = {
   securePipelines: currentSchema["$defs"]["secure-pipelines-phases"].properties.automated.items.properties.phase.enum,
@@ -92,7 +96,7 @@ const purposes = currentSchema["$defs"]["purpose"].enum;
 ```
 
 ```js
-// Group services by product, attaching repository name and URL
+// Group services by product, attaching repository name, URL, and pod
 const servicesByProduct = Object.groupBy(
   repositories
     .filter(node => node.manifest?.text?.services)
@@ -100,7 +104,8 @@ const servicesByProduct = Object.groupBy(
       node.manifest.text.services.map(service => ({
         ...service,
         repository: node.name,
-        repositoryUrl: `https://github.com/${node.owner.login}/${node.name}`
+        repositoryUrl: `https://github.com/${node.owner.login}/${node.name}`,
+        pod: node.pod?.value ?? null
       }))
     )
     .filter(service => isIncluded(service.product, service.component)),
@@ -175,8 +180,13 @@ function renderDonut(group) {
 ```
 
 ```js
-display(html`${Object.keys(servicesByProduct).sort().map(product => {
-  const services = servicesByProduct[product];
+// Group all services by pod
+const allServices = Object.values(servicesByProduct).flat();
+const podGrouping = groupServicesByPod(allServices);
+```
+
+```js
+function renderProductGrids(product, services) {
   const allChecksGrid = buildAllChecksGrid(product, services, allCheckTypes);
 
   // Build one check-level grid per level-group name
@@ -208,7 +218,21 @@ display(html`${Object.keys(servicesByProduct).sort().map(product => {
       ${allChecksGroup ? renderStatusGrid(toAllChecksTableModel({ ...allChecksGroup, title: null }, iconsMapping)) : ""}
     `;
   })}`;
-})}`)
+}
+```
+
+```js
+display(html`${podGrouping.pods.map(pod => html`
+  <details open>
+    <summary><h2 style="display: inline;">${pod.name}</h2></summary>
+    ${Object.keys(pod.products).map(product => renderProductGrids(product, pod.products[product]))}
+  </details>
+`)}${Object.keys(podGrouping.noPod).length > 0 ? html`
+  <details open>
+    <summary><h2 style="display: inline;">No Pod</h2></summary>
+    ${Object.keys(podGrouping.noPod).map(product => renderProductGrids(product, podGrouping.noPod[product]))}
+  </details>
+` : ""}`)
 ```
 
 ----

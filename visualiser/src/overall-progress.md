@@ -96,8 +96,10 @@ const allServices = prepareServicesWithPod(repositories);
 ```
 
 ```js
-// Derive unique filter options from unfiltered data
+// Derive unique filter options from unfiltered data (include "No Pod" for services without a pod)
+const NO_POD = "No Pod";
 const allPodValues = [...new Set(allServices.map(s => s.pod).filter(Boolean))].sort();
+const podOptionsWithNoPod = allServices.some(s => !s.pod) ? [...allPodValues, NO_POD] : allPodValues;
 ```
 
 <div class="card" style="padding: 1rem;">
@@ -112,14 +114,14 @@ const repoFilteredServices = view(Inputs.search(allServices, {
 <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
 
 ```js
-const selectedPods = view(Inputs.checkbox(allPodValues, {label: "Pod", value: allPodValues}));
+const selectedPods = view(Inputs.checkbox(podOptionsWithNoPod, {label: "Pod", value: podOptionsWithNoPod}));
 ```
 
 ```js
 // Product options filtered by selected pods
 const availableProducts = [...new Set(
   allServices
-    .filter(s => s.pod ? selectedPods.includes(s.pod) : true)
+    .filter(s => s.pod ? selectedPods.includes(s.pod) : selectedPods.includes(NO_POD))
     .map(s => s.product)
 )].sort();
 const selectedProducts = view(Inputs.checkbox(availableProducts, {label: "Product", value: availableProducts}));
@@ -131,7 +133,7 @@ const selectedProducts = view(Inputs.checkbox(availableProducts, {label: "Produc
 ```js
 // Apply all filters (search result already filtered by repository, then pod + product)
 const filteredServices = repoFilteredServices
-  .filter(s => s.pod ? selectedPods.includes(s.pod) : true)
+  .filter(s => s.pod ? selectedPods.includes(s.pod) : selectedPods.includes(NO_POD))
   .filter(s => selectedProducts.includes(s.product));
 ```
 
@@ -163,7 +165,9 @@ function renderProductGrids(product, services) {
 ```
 
 ```js
-display(html`${podGrouping.pods.map(pod => html`
+display(html`${filteredServices.length === 0
+  ? html`<p style="color: #666; font-style: italic; padding: 2rem;">No services match the current filters.</p>`
+  : html`${podGrouping.pods.map(pod => html`
   <details open>
     <summary><h2 style="display: inline;">${pod.name}</h2></summary>
     ${Object.keys(pod.products).map(product => renderProductGrids(product, pod.products[product]))}
@@ -173,7 +177,7 @@ display(html`${podGrouping.pods.map(pod => html`
     <summary><h2 style="display: inline;">No Pod</h2></summary>
     ${Object.keys(podGrouping.noPod).map(product => renderProductGrids(product, podGrouping.noPod[product]))}
   </details>
-` : ""}`)
+` : ""}`}`)
 ```
 
 ----

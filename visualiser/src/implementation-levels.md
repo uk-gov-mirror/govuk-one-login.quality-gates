@@ -96,12 +96,53 @@ const purposes = currentSchema["$defs"]["purpose"].enum;
 ```
 
 ```js
-// Group services by product, attaching repository name, URL, and pod
-const servicesByProduct = Object.groupBy(
-  prepareServicesWithPod(repositories)
-    .filter(service => isIncluded(service.product, service.component)),
-  service => service.product
-);
+// All services (unfiltered, after isIncluded config filter) for deriving filter options
+const allServices = prepareServicesWithPod(repositories)
+  .filter(service => isIncluded(service.product, service.component));
+```
+
+```js
+// Derive unique filter options from unfiltered data
+const allPodValues = [...new Set(allServices.map(s => s.pod).filter(Boolean))].sort();
+```
+
+<div class="card" style="padding: 1rem;">
+
+```js
+const repoFilteredServices = view(Inputs.search(allServices, {
+  placeholder: "Search repositories…",
+  filter: (query) => (d) => d.repository.toLowerCase().includes(query.toLowerCase())
+}));
+```
+
+<div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+
+```js
+const selectedPods = view(Inputs.checkbox(allPodValues, {label: "Pod", value: allPodValues}));
+```
+
+```js
+// Product options filtered by selected pods
+const availableProducts = [...new Set(
+  allServices
+    .filter(s => s.pod ? selectedPods.includes(s.pod) : true)
+    .map(s => s.product)
+)].sort();
+const selectedProducts = view(Inputs.checkbox(availableProducts, {label: "Product", value: availableProducts}));
+```
+
+</div>
+</div>
+
+```js
+// Apply all filters (search result already filtered by repository, then pod + product)
+const filteredServices = repoFilteredServices
+  .filter(s => s.pod ? selectedPods.includes(s.pod) : true)
+  .filter(s => selectedProducts.includes(s.product));
+```
+
+```js
+const podGrouping = groupServicesByPod(filteredServices);
 ```
 
 ```js
@@ -168,12 +209,6 @@ function renderDonut(group) {
 
   return svg.node();
 }
-```
-
-```js
-// Group all services by pod
-const allServices = Object.values(servicesByProduct).flat();
-const podGrouping = groupServicesByPod(allServices);
 ```
 
 ```js

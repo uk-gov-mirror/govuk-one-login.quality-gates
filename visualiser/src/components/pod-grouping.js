@@ -73,3 +73,23 @@ function sortObjectKeys(obj) {
   }
   return sorted;
 }
+
+/**
+ * Flattens repository nodes into a flat array of services with
+ * repository, repositoryUrl, and pod attached to each service.
+ *
+ * @param {Array} repositoryNodes - Array of repository node objects from GraphQL data
+ * @returns {Array} Flat array of service objects enriched with repo metadata and pod
+ */
+export function prepareServicesWithPod(repositoryNodes) {
+  return repositoryNodes
+    .filter(node => node.manifest?.text?.services)
+    .flatMap(node =>
+      node.manifest.text.services.map(service => ({
+        ...service,
+        repository: node.name,
+        repositoryUrl: `https://github.com/${node.owner.login}/${node.name}`,
+        pod: node.pod?.value ?? null
+      }))
+    );
+}

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { groupServicesByPod } from "./pod-grouping.js";
+import { groupServicesByPod, prepareServicesWithPod } from "./pod-grouping.js";
 
 function makeService(overrides) {
   return {
@@ -176,5 +176,115 @@ describe("groupServicesByPod", () => {
     assert.equal(result.pods.length, 1);
     assert.equal(result.pods[0].name, "Account");
     assert.equal(result.pods[0].products["Shared"].length, 2);
+  });
+});
+
+describe("prepareServicesWithPod", () => {
+  function makeNode(overrides) {
+    return {
+      name: "repo-a",
+      owner: { login: "org" },
+      pod: { value: "Account" },
+      manifest: {
+        text: {
+          services: [
+            { product: "Auth", component: "api", promotionType: "securePipelines" }
+          ]
+        }
+      },
+      ...overrides,
+    };
+  }
+
+  it("returns an empty array when given no repositories", () => {
+    const result = prepareServicesWithPod([]);
+    assert.deepEqual(result, []);
+  });
+
+  it("skips repositories without manifests", () => {
+    const nodes = [makeNode({ manifest: null })];
+    const result = prepareServicesWithPod(nodes);
+    assert.deepEqual(result, []);
+  });
+
+  it("skips repositories where manifest.text has no services", () => {
+    const nodes = [makeNode({ manifest: { text: {} } })];
+    const result = prepareServicesWithPod(nodes);
+    assert.deepEqual(result, []);
+  });
+
+  it("attaches repository name to each service", () => {
+    const nodes = [makeNode({ name: "my-repo" })];
+    const result = prepareServicesWithPod(nodes);
+    assert.equal(result[0].repository, "my-repo");
+  });
+
+  it("attaches repositoryUrl to each service", () => {
+    const nodes = [makeNode({ name: "my-repo", owner: { login: "my-org" } })];
+    const result = prepareServicesWithPod(nodes);
+    assert.equal(result[0].repositoryUrl, "https://github.com/my-org/my-repo");
+  });
+
+  it("attaches pod value from the node to each service", () => {
+    const nodes = [makeNode({ pod: { value: "Identity" } })];
+    const result = prepareServicesWithPod(nodes);
+    assert.equal(result[0].pod, "Identity");
+  });
+
+  it("attaches null pod when node has no pod property", () => {
+    const nodes = [makeNode({ pod: null })];
+    const result = prepareServicesWithPod(nodes);
+    assert.equal(result[0].pod, null);
+  });
+
+  it("attaches null pod when pod has no value", () => {
+    const nodes = [makeNode({ pod: {} })];
+    const result = prepareServicesWithPod(nodes);
+    assert.equal(result[0].pod, null);
+  });
+
+  it("flattens multiple services from a single repo", () => {
+    const nodes = [makeNode({
+      manifest: {
+        text: {
+          services: [
+            { product: "Auth", component: "api", promotionType: "securePipelines" },
+            { product: "Auth", component: "frontend", promotionType: "securePipelines" },
+          ]
+        }
+      }
+    })];
+    const result = prepareServicesWithPod(nodes);
+    assert.equal(result.length, 2);
+    assert.equal(result[0].component, "api");
+    assert.equal(result[1].component, "frontend");
+  });
+
+  it("flattens services from multiple repos", () => {
+    const nodes = [
+      makeNode({ name: "repo-a", pod: { value: "Account" } }),
+      makeNode({ name: "repo-b", pod: { value: "Identity" }, manifest: { text: { services: [{ product: "IPV", component: "core", promotionType: "securePipelines" }] } } }),
+    ];
+    const result = prepareServicesWithPod(nodes);
+    assert.equal(result.length, 2);
+    assert.equal(result[0].pod, "Account");
+    assert.equal(result[1].pod, "Identity");
+  });
+
+  it("preserves all original service properties", () => {
+    const nodes = [makeNode({
+      manifest: {
+        text: {
+          services: [
+            { product: "Auth", component: "api", promotionType: "securePipelines", automated: [{ checks: [{ name: "unit" }] }] }
+          ]
+        }
+      }
+    })];
+    const result = prepareServicesWithPod(nodes);
+    assert.equal(result[0].product, "Auth");
+    assert.equal(result[0].component, "api");
+    assert.equal(result[0].promotionType, "securePipelines");
+    assert.deepEqual(result[0].automated, [{ checks: [{ name: "unit" }] }]);
   });
 });
